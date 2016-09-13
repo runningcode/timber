@@ -58,10 +58,6 @@ public final class WrongTimberUsageDetector extends Detector implements Detector
   private final static String GET_STRING_METHOD = "getString";
   private final static String TIMBER_TREE_LOG_METHOD_REGEXP = "(v|d|i|w|e|wtf)";
 
-  @NonNull @Override public Speed getSpeed() {
-    return Speed.NORMAL;
-  }
-
   @Override public List<String> getApplicableCallNames() {
     return Arrays.asList("v", "d", "i", "w", "e", "wtf");
   }
@@ -74,8 +70,7 @@ public final class WrongTimberUsageDetector extends Detector implements Detector
       @NonNull MethodNode method, @NonNull MethodInsnNode call) {
     String owner = call.owner;
     if (owner.startsWith("android/util/Log")) {
-      context.report(ISSUE_LOG, method, call, context.getLocation(call),
-          "Using 'Log' instead of 'Timber'");
+      context.report(ISSUE_LOG, method, call, context.getLocation(call), ISSUE_LOG_MESSAGE);
     }
   }
 
@@ -103,8 +98,7 @@ public final class WrongTimberUsageDetector extends Detector implements Detector
       if (!Pattern.matches("^Timber\\." + TIMBER_TREE_LOG_METHOD_REGEXP + ".*", statement.toString())) {
         return;
       }
-      context.report(ISSUE_FORMAT, node, context.getLocation(node),
-          "Using 'String#format' inside of 'Timber'");
+      context.report(ISSUE_FORMAT, node, context.getLocation(node), ISSUE_FORMAT_MESSAGE);
     } else if ("tag".equals(methodName)) {
       VariableReference ref = (VariableReference) node.astOperand();
       if (!"Timber".equals(ref.astIdentifier().astValue())) {
@@ -113,9 +107,7 @@ public final class WrongTimberUsageDetector extends Detector implements Detector
       Node argument = node.astArguments().iterator().next();
       String tag = findLiteralValue(context, argument);
       if (tag != null && tag.length() > 23) {
-        String message = String.format(
-            "The logging tag can be at most 23 characters, was %1$d (%2$s)",
-            tag.length(), tag);
+        String message = String.format(ISSUE_TAG_LENGTH_FORMAT, tag.length(), tag);
         context.report(ISSUE_TAG_LENGTH, node, context.getLocation(argument), message);
       }
     } else if (node.astOperand() instanceof VariableReference) {
@@ -201,10 +193,8 @@ public final class WrongTimberUsageDetector extends Detector implements Detector
     int argumentCount = getFormatArgumentCount(formatString);
     int passedArgCount = originalArgSize - startIndexOfArguments;
     if (argumentCount < passedArgCount) {
-      context.report(ISSUE_ARG_COUNT, reportNode, context.getLocation(reportNode), String.format(
-              "Wrong argument count, format string `%1$s` requires "
-                  + "`%2$d` but format call supplies `%3$d`", formatString, argumentCount,
-              passedArgCount));
+      context.report(ISSUE_ARG_COUNT, reportNode, context.getLocation(reportNode),
+              String.format(ISSUE_ARG_COUNT_MESSAGE, formatString, argumentCount, passedArgCount));
       return;
     }
 
@@ -220,10 +210,8 @@ public final class WrongTimberUsageDetector extends Detector implements Detector
       if (logArguments.hasNext()) {
         argument = logArguments.next();
       } else {
-        context.report(ISSUE_ARG_COUNT, reportNode, context.getLocation(reportNode), String.format(
-                "Wrong argument count, format string `%1$s` requires "
-                    + "`%2$d` but format call supplies `%3$d`", formatString, argumentCount,
-                passedArgCount));
+        context.report(ISSUE_ARG_COUNT, reportNode, context.getLocation(reportNode),
+                String.format(ISSUE_ARG_COUNT_MESSAGE, formatString, argumentCount, passedArgCount));
       }
 
       char last = formatType.charAt(formatType.length() - 1);
@@ -272,9 +260,7 @@ public final class WrongTimberUsageDetector extends Detector implements Detector
             valid = true;
         }
         if (!valid) {
-          String message = String.format("Wrong argument type for formatting argument '#%1$d' "
-                  + "in `%2$s`: conversion is '`%3$s`', received `%4$s` "
-                  + "(argument #%5$d in method call)", i + 1, formatString, formatType,
+          String message = String.format(ISSUE_ARG_TYPES_MESSAGE, i + 1, formatString, formatType,
               type.getSimpleName(), startIndexOfArguments + i + 1);
           context.report(ISSUE_ARG_TYPES, reportNode, context.getLocation(argument), message);
         }
@@ -381,7 +367,13 @@ public final class WrongTimberUsageDetector extends Detector implements Detector
     if (resolved instanceof JavaParser.ResolvedVariable) {
       JavaParser.ResolvedVariable resolvedVariable = (JavaParser.ResolvedVariable) resolved;
       JavaParser.ResolvedClass typeClass = resolvedVariable.getType().getTypeClass();
-      return (typeClass != null && typeClass.isSubclassOf(clazz.getName(), false));
+      try {
+        // If typeClass is a generic we cannot determine what type of class it is.
+        return (typeClass != null && typeClass.isSubclassOf(clazz.getName(), false));
+      } catch (NullPointerException e) {
+        e.printStackTrace();
+        return false;
+      }
     }
     return false;
   }
@@ -501,8 +493,7 @@ public final class WrongTimberUsageDetector extends Detector implements Detector
       if (argument instanceof VariableReference) {
         VariableReference variableReference = (VariableReference) argument;
         if (isSubclassOf(context, variableReference, Throwable.class) && index > 0) {
-          context.report(ISSUE_THROWABLE, node, context.getLocation(node),
-              "Throwable should be first argument");
+          context.report(ISSUE_THROWABLE, node, context.getLocation(node), ISSUE_THROWABLE_MESSAGE);
         }
       }
       index++;
@@ -513,8 +504,7 @@ public final class WrongTimberUsageDetector extends Detector implements Detector
     if (argument instanceof BinaryExpression) {
       Class argumentType = getType(context, (BinaryExpression) argument);
       if (argumentType == String.class) {
-        context.report(ISSUE_BINARY, node, context.getLocation(argument),
-            "Replace String concatenation with Timber's string formatting");
+        context.report(ISSUE_BINARY, node, context.getLocation(argument), ISSUE_BINARY_MESSAGE);
         return true;
       }
     } else if (argument instanceof If || argument instanceof InlineIfExpression) {
@@ -579,4 +569,16 @@ public final class WrongTimberUsageDetector extends Detector implements Detector
       Issue.create("TimberTagLength", "Too Long Log Tags", "Log tags are only allowed to be at most"
               + " 23 tag characters long.", Category.CORRECTNESS, 5, Severity.ERROR,
           new Implementation(WrongTimberUsageDetector.class, Scope.JAVA_FILE_SCOPE));
+
+  private static final String ISSUE_LOG_MESSAGE = "Using 'Log' instead of 'Timber'";
+  private static final String ISSUE_FORMAT_MESSAGE = "Using 'String#format' inside of 'Timber'";
+  private static final String ISSUE_THROWABLE_MESSAGE = "Throwable should be first argument";
+  private static final String ISSUE_BINARY_MESSAGE = "Replace String concatenation with Timber's string formatting";
+  private static final String ISSUE_ARG_COUNT_MESSAGE = "Wrong argument count, format string `%1$s` requires "
+          + "`%2$d` but format call supplies `%3$d`";
+  private static final String ISSUE_ARG_TYPES_MESSAGE = "Wrong argument type for formatting argument '#%1$d' "
+          + "in `%2$s`: conversion is '`%3$s`', received `%4$s` "
+          + "(argument #%5$d in method call)";
+  private static final String ISSUE_TAG_LENGTH_FORMAT = "The logging tag can be at most 23 " +
+          "characters, was %1$d (%2$s)";
 }

@@ -1,8 +1,5 @@
 apply plugin: 'java'
 
-targetCompatibility = JavaVersion.VERSION_1_7
-sourceCompatibility = JavaVersion.VERSION_1_7
-
 configurations {
   lintChecks
 }
@@ -10,12 +7,15 @@ configurations {
 dependencies {
   compile deps.lintapi
   compile deps.lintchecks
+  testCompile deps.lint
+  testCompile deps.lintTests
+  testCompile deps.testUtils
 
   lintChecks files(jar)
 }
 
 jar {
   manifest {
-    attributes('Lint-Registry': 'timber.lint.IssueRegistry')
+    attributes('Lint-Registry': 'timber.lint.TimberIssueRegistry')
   }
 }

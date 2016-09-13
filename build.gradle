@@ -32,6 +32,9 @@ ext.deps = [
     robolectric: 'org.robolectric:robolectric:3.0',
 
     // Lint dependencies
+    lint    : "com.android.tools.lint:lint:${lintVersion}",
     lintapi    : "com.android.tools.lint:lint-api:${lintVersion}",
-    lintchecks : "com.android.tools.lint:lint-checks:${lintVersion}"
+    lintchecks : "com.android.tools.lint:lint-checks:${lintVersion}",
+    lintTests : "com.android.tools.lint:lint-tests:${lintVersion}",
+    testUtils : "com.android.tools:testutils:${lintVersion}"
 ]
